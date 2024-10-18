@@ -226,10 +226,8 @@ Status DecodeModularChannelMAANS(BitReader *br, ANSSymbolReader *reader,
             }
           }
         }
-      }
-      return true;
-    } else if (uses_lz77 && predictor == Predictor::Gradient && offset == 0 &&
-               multiplier == 1 && reader->IsHuffRleOnly()) {
+    } else if (predictor == Predictor::Gradient && offset == 0 && ctx_id == 1 &&
+               multiplier == 1 && reader->FJXLFastPath()) {
       JXL_DEBUG_V(8, "Gradient RLE (fjxl) very fast track.");
       pixel_type_w sv = UnpackSigned(fl_v);
       for (size_t y = 0; y < channel.h; y++) {
@@ -239,7 +237,7 @@ Status DecodeModularChannelMAANS(BitReader *br, ANSSymbolReader *reader,
             (y ? channel.Row(y - 1) - 1 : r - 1);
         pixel_type_w guess = (y ? rtop[0] : 0);
         if (fl_run == 0) {
-          reader->ReadHybridUintClusteredHuffRleOnly(ctx_id, br, &fl_v,
+          reader->ReadHybridUintFJXLFastPath(br, &fl_v,
                                                      &fl_run);
           sv = UnpackSigned(fl_v);
         } else {
@@ -252,7 +250,7 @@ Status DecodeModularChannelMAANS(BitReader *br, ANSSymbolReader *reader,
           pixel_type topleft = rtopleft[x];
           pixel_type_w guess = ClampedGradient(top, left, topleft);
           if (!fl_run) {
-            reader->ReadHybridUintClusteredHuffRleOnly(ctx_id, br, &fl_v,
+            reader->ReadHybridUintFJXLFastPath(br, &fl_v,
                                                        &fl_run);
             sv = UnpackSigned(fl_v);
           } else {
