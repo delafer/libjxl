@@ -248,9 +248,12 @@ Status InvVSqueeze(Image &input, uint32_t c, uint32_t rc, ThreadPool *pool) {
     return true;
   }
 
-  static constexpr const int kColsPerThread = 64;
-  const auto unsqueeze_slice = [&](const uint32_t task,
-                                   size_t /* thread */) -> Status {
+  intptr_t onerow_in = chin.PixelsPerRow();
+  intptr_t onerow_out = chout.PixelsPerRow();
+  constexpr int kColsPerThread = 64;
+  JXL_RETURN_IF_ERROR(RunOnPool(
+      pool, 0, DivCeil(chin.w, kColsPerThread), ThreadPool::NoInit,
+      [&](const uint32_t task, size_t /* thread */) {
     const size_t x0 = task * kColsPerThread;
     const size_t x1 =
         std::min(static_cast<size_t>(task + 1) * kColsPerThread, chin.w);

@@ -80,7 +80,7 @@ StatusOr<Image> Image::Clone(const Image &that) {
   for (const Channel &ch : that.channel) {
     JXL_ASSIGN_OR_RETURN(Channel a, Channel::Create(memory_manager, ch.w, ch.h,
                                                     ch.hshift, ch.vshift));
-    JXL_RETURN_IF_ERROR(CopyImageTo(ch.plane, &a.plane));
+    JXL_RETURN_IF_ERROR(CopyImageTo(*ch.GetPlane(), a.GetPlane()));
     clone.channel.push_back(std::move(a));
   }
   return clone;

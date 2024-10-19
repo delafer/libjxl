@@ -80,7 +80,7 @@ Status FwdVSqueeze(Image &input, int c, int rc) {
   JXL_ASSIGN_OR_RETURN(Channel chout_residual,
                        Channel::Create(memory_manager, chin.w, chin.h - chout.h,
                                        chin.hshift, chin.vshift + 1));
-  intptr_t onerow_in = chin.plane.PixelsPerRow();
+  intptr_t onerow_in = chin.PixelsPerRow();
   for (size_t y = 0; y < chout_residual.h; y++) {
     const pixel_type *JXL_RESTRICT p_in = chin.Row(y * 2);
     pixel_type *JXL_RESTRICT p_out = chout.Row(y);

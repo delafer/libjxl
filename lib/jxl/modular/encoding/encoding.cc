@@ -265,7 +265,7 @@ Status DecodeModularChannelMAANS(BitReader *br, ANSSymbolReader *reader,
     } else if (predictor == Predictor::Gradient && offset == 0 &&
                multiplier == 1) {
       JXL_DEBUG_V(8, "Gradient very fast track.");
-      const intptr_t onerow = channel.plane.PixelsPerRow();
+      const intptr_t onerow = channel.PixelsPerRow();
       for (size_t y = 0; y < channel.h; y++) {
         pixel_type *JXL_RESTRICT r = channel.Row(y);
         for (size_t x = 0; x < channel.w; x++) {
@@ -278,6 +278,38 @@ Status DecodeModularChannelMAANS(BitReader *br, ANSSymbolReader *reader,
           r[x] = make_pixel(v, 1, guess);
         }
       }
+    } else if (predictor != Predictor::Weighted) {
+      // special optimized case: no wp
+      JXL_DEBUG_V(8, "Quite fast track.");
+      const intptr_t onerow = channel.PixelsPerRow();
+      for (size_t y = 0; y < channel.h; y++) {
+        pixel_type *JXL_RESTRICT r = channel.Row(y);
+        for (size_t x = 0; x < channel.w; x++) {
+          PredictionResult pred =
+              PredictNoTreeNoWP(channel.w, r + x, onerow, x, y, predictor);
+          pixel_type_w g = pred.guess + offset;
+          uint64_t v = reader->ReadHybridUintClustered(ctx_id, br);
+          // NOTE: pred.multiplier is unset.
+          r[x] = make_pixel(v, multiplier, g);
+        }
+      }
+    } else {
+      JXL_DEBUG_V(8, "Somewhat fast track.");
+      const intptr_t onerow = channel.PixelsPerRow();
+      weighted::State wp_state(wp_header, channel.w, channel.h);
+      for (size_t y = 0; y < channel.h; y++) {
+        pixel_type *JXL_RESTRICT r = channel.Row(y);
+        for (size_t x = 0; x < channel.w; x++) {
+          pixel_type_w g = PredictNoTreeWP(channel.w, r + x, onerow, x, y,
+                                           predictor, &wp_state)
+                               .guess +
+                           offset;
+          uint64_t v = reader->ReadHybridUintClustered(ctx_id, br);
+          r[x] = make_pixel(v, multiplier, g);
+          wp_state.UpdateErrors(r[x], x, y, channel.w);
+        }
+      }
+    }
       return true;
     }
   }
@@ -293,7 +325,7 @@ Status DecodeModularChannelMAANS(BitReader *br, ANSSymbolReader *reader,
 
   if (is_gradient_only) {
     JXL_DEBUG_V(8, "Gradient fast track.");
-    const intptr_t onerow = channel.plane.PixelsPerRow();
+    const intptr_t onerow = channel.PixelsPerRow();
     for (size_t y = 0; y < channel.h; y++) {
       pixel_type *JXL_RESTRICT r = channel.Row(y);
       for (size_t x = 0; x < channel.w; x++) {
@@ -314,6 +346,7 @@ Status DecodeModularChannelMAANS(BitReader *br, ANSSymbolReader *reader,
     }
   } else if (!uses_lz77 && is_wp_only && channel.w > 8) {
     JXL_DEBUG_V(8, "WP fast track.");
+    const intptr_t onerow = channel.PixelsPerRow();
     weighted::State wp_state(wp_header, channel.w, channel.h);
     Properties properties(1);
     for (size_t y = 0; y < channel.h; y++) {
@@ -378,7 +411,7 @@ Status DecodeModularChannelMAANS(BitReader *br, ANSSymbolReader *reader,
     JXL_DEBUG_V(8, "Slow track.");
     MATreeLookup tree_lookup(tree);
     Properties properties = Properties(num_props);
-    const intptr_t onerow = channel.plane.PixelsPerRow();
+    const intptr_t onerow = channel.PixelsPerRow();
     JXL_ASSIGN_OR_RETURN(
         Channel references,
         Channel::Create(memory_manager,
@@ -427,7 +460,7 @@ Status DecodeModularChannelMAANS(BitReader *br, ANSSymbolReader *reader,
     JXL_DEBUG_V(8, "Slowest track.");
     MATreeLookup tree_lookup(tree);
     Properties properties = Properties(num_props);
-    const intptr_t onerow = channel.plane.PixelsPerRow();
+    const intptr_t onerow = channel.PixelsPerRow();
     JXL_ASSIGN_OR_RETURN(
         Channel references,
         Channel::Create(memory_manager,
@@ -583,7 +616,7 @@ Status ModularDecode(BitReader *br, Image &image, GroupHeader &header,
   size_t next_channel = 0;
   auto scope_guard = MakeScopeGuard([&]() {
     for (size_t c = next_channel; c < image.channel.size(); c++) {
-      ZeroFillImage(&image.channel[c].plane);
+      image.channel[c].ZeroFill();
     }
   });
   // Do not do anything if truncated groups are not allowed.

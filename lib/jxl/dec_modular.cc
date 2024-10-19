@@ -293,7 +293,8 @@ void ModularFrameDecoder::MaybeDropFullImage() {
     JXL_DEBUG_V(6, "Dropping full image");
     for (auto& ch : full_image.channel) {
       // keep metadata on channels around, but dealloc their planes
-      ch.plane = Plane<pixel_type>();
+      Plane<pixel_type> empty{};
+      ch.GetPlane()->Swap(empty);
     }
   }
 }
@@ -329,13 +330,13 @@ Status ModularFrameDecoder::DecodeGroup(
     if (r.xsize() == 0 || r.ysize() == 0) continue;
     if (zerofill && use_full_image) {
       for (size_t y = 0; y < r.ysize(); ++y) {
-        pixel_type* const JXL_RESTRICT row_out = r.Row(&fc.plane, y);
+        pixel_type* const JXL_RESTRICT row_out = r.Row(fc.GetPlane(), y);
         memset(row_out, 0, r.xsize() * sizeof(*row_out));
       }
     } else {
       JXL_ASSIGN_OR_RETURN(
           Channel gc, Channel::Create(memory_manager_, r.xsize(), r.ysize()));
-      if (zerofill) ZeroFillImage(&gc.plane);
+      if (zerofill) gc.ZeroFill();
       gc.hshift = fc.hshift;
       gc.vshift = fc.vshift;
       gi.channel.emplace_back(std::move(gc));
@@ -387,8 +388,8 @@ Status ModularFrameDecoder::DecodeGroup(
     JXL_ENSURE(use_full_image);
     JXL_RETURN_IF_ERROR(
         CopyImageTo(/*rect_from=*/Rect(0, 0, r.xsize(), r.ysize()),
-                    /*from=*/gi.channel[gic].plane,
-                    /*rect_to=*/r, /*to=*/&fc.plane));
+                    /*from=*/*gi.channel[gic].GetPlane(),
+                    /*rect_to=*/r, /*to=*/fc.GetPlane()));
     gic++;
   }
   return true;
@@ -465,10 +466,12 @@ Status ModularFrameDecoder::DecodeAcMetadata(const FrameHeader& frame_header,
     return JXL_FAILURE("Failed to decode AC metadata");
   }
   JXL_RETURN_IF_ERROR(
-      ConvertPlaneAndClamp(Rect(image.channel[0].plane), image.channel[0].plane,
+      ConvertPlaneAndClamp(Rect(0, 0, cr.xsize(), cr.ysize()),
+                       *image.channel[0].GetPlane(),
                            cr, &dec_state->shared_storage.cmap.ytox_map));
   JXL_RETURN_IF_ERROR(
-      ConvertPlaneAndClamp(Rect(image.channel[1].plane), image.channel[1].plane,
+      ConvertPlaneAndClamp(Rect(0, 0, cr.xsize(), cr.ysize()),
+                       *image.channel[1].GetPlane(),
                            cr, &dec_state->shared_storage.cmap.ytob_map));
   size_t num = 0;
   bool is444 = frame_header.chroma_subsampling.Is444();
@@ -480,9 +483,9 @@ Status ModularFrameDecoder::DecodeAcMetadata(const FrameHeader& frame_header,
     size_t y = r.y0() + iy;
     int32_t* row_qf = r.Row(&dec_state->shared_storage.raw_quant_field, iy);
     uint8_t* row_epf = r.Row(&dec_state->shared_storage.epf_sharpness, iy);
-    int32_t* row_in_1 = image.channel[2].plane.Row(0);
-    int32_t* row_in_2 = image.channel[2].plane.Row(1);
-    int32_t* row_in_3 = image.channel[3].plane.Row(iy);
+    int32_t* row_in_1 = image.channel[2].Row(0);
+    int32_t* row_in_2 = image.channel[2].Row(1);
+    int32_t* row_in_3 = image.channel[3].Row(iy);
     for (size_t ix = 0; ix < r.xsize(); ix++) {
       size_t x = r.x0() + ix;
       int sharpness = row_in_3[ix];
@@ -574,7 +577,7 @@ Status ModularFrameDecoder::ModularImageToDecodedRect(
               modular_rect.y0() >> ch_in.vshift,
               DivCeil(modular_rect.xsize(), 1 << ch_in.hshift),
               DivCeil(modular_rect.ysize(), 1 << ch_in.vshift));
-      mr = mr.Crop(ch_in.plane);
+      mr = mr.Crop(ch_in.w, ch_in.h);
       size_t xsize_shifted = r.xsize();
       size_t ysize_shifted = r.ysize();
       if (r.ysize() != mr.ysize() || r.xsize() != mr.xsize()) {
@@ -589,9 +592,9 @@ Status ModularFrameDecoder::ModularImageToDecodedRect(
         const auto process_row = [&](const uint32_t task,
                                      size_t /* thread */) -> Status {
           const size_t y = task;
-          const pixel_type* const JXL_RESTRICT row_in = mr.Row(&ch_in.plane, y);
+          const pixel_type* const JXL_RESTRICT row_in = mr.Row(ch_in.GetPlane(), y);
           const pixel_type* const JXL_RESTRICT row_in_Y =
-              mr.Row(&gi.channel[0].plane, y);
+              mr.Row(gi.channel[0].GetPlane(), y);
           float* const JXL_RESTRICT row_out = get_row(c, y);
           HWY_DYNAMIC_DISPATCH(MultiplySum)
           (xsize_shifted, row_in, row_in_Y, factor, row_out);
@@ -606,7 +609,7 @@ Status ModularFrameDecoder::ModularImageToDecodedRect(
         const auto process_row = [&](const uint32_t task,
                                      size_t /* thread */) -> Status {
           const size_t y = task;
-          const pixel_type* const JXL_RESTRICT row_in = mr.Row(&ch_in.plane, y);
+          const pixel_type* const JXL_RESTRICT row_in = mr.Row(ch_in.GetPlane(), y);
           if (rgb_from_gray) {
             for (size_t cc = 0; cc < 3; cc++) {
               float* const JXL_RESTRICT row_out = get_row(cc, y);
@@ -627,7 +630,7 @@ Status ModularFrameDecoder::ModularImageToDecodedRect(
         const auto process_row = [&](const uint32_t task,
                                      size_t /* thread */) -> Status {
           const size_t y = task;
-          const pixel_type* const JXL_RESTRICT row_in = mr.Row(&ch_in.plane, y);
+          const pixel_type* const JXL_RESTRICT row_in = mr.Row(ch_in.GetPlane(), y);
           if (rgb_from_gray) {
             if (full_image.bitdepth < 23) {
               HWY_DYNAMIC_DISPATCH(RgbFromSingle)
@@ -680,7 +683,7 @@ Status ModularFrameDecoder::ModularImageToDecodedRect(
             modular_rect.y0() >> ch_in.vshift,
             DivCeil(modular_rect.xsize(), 1 << ch_in.hshift),
             DivCeil(modular_rect.ysize(), 1 << ch_in.vshift));
-    mr = mr.Crop(ch_in.plane);
+    mr = mr.Crop(ch_in.w, ch_in.h);
     if (r.ysize() != mr.ysize() || r.xsize() != mr.xsize()) {
       return JXL_FAILURE("Dimension mismatch: trying to fit a %" PRIuS
                          "x%" PRIuS
@@ -690,7 +693,7 @@ Status ModularFrameDecoder::ModularImageToDecodedRect(
     }
     for (size_t y = 0; y < r.ysize(); ++y) {
       float* const JXL_RESTRICT row_out = r.Row(buffer.first, y);
-      const pixel_type* const JXL_RESTRICT row_in = mr.Row(&ch_in.plane, y);
+      const pixel_type* const JXL_RESTRICT row_in = mr.Row(ch_in.GetPlane(), y);
       if (fp) {
         JXL_RETURN_IF_ERROR(
             int_to_float(row_in, row_out, r.xsize(), bits, exp_bits));

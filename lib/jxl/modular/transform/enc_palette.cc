@@ -270,8 +270,8 @@ Status FwdPaletteIteration(Image &input, uint32_t begin_c, uint32_t end_c,
     JXL_ASSIGN_OR_RETURN(quantized_input, Image::Create(memory_manager, w, h,
                                                         input.bitdepth, nb));
     for (size_t c = 0; c < nb; c++) {
-      JXL_RETURN_IF_ERROR(CopyImageTo(input.channel[begin_c + c].plane,
-                                      &quantized_input.channel[c].plane));
+      JXL_RETURN_IF_ERROR(CopyImageTo(*input.channel[begin_c + c].GetPlane(),
+                                      quantized_input.channel[c].GetPlane()));
     }
   }
 
@@ -392,8 +392,8 @@ Status FwdPaletteIteration(Image &input, uint32_t begin_c, uint32_t end_c,
   pch.hshift = -1;
   pch.vshift = -1;
   pixel_type *JXL_RESTRICT p_palette = pch.Row(0);
-  intptr_t onerow = pch.plane.PixelsPerRow();
-  intptr_t onerow_image = input.channel[begin_c].plane.PixelsPerRow();
+  intptr_t onerow = pch.PixelsPerRow();
+  intptr_t onerow_image = input.channel[begin_c].PixelsPerRow();
   const int bit_depth = std::min(input.bitdepth, 24);
 
   if (lossy) {

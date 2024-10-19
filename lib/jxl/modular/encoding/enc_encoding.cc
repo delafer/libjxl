@@ -134,7 +134,7 @@ Status GatherTreeData(const Image &image, pixel_type chan, size_t group_id,
     return (bits >> 32) <= threshold;
   };
 
-  const intptr_t onerow = channel.plane.PixelsPerRow();
+  const intptr_t onerow = channel.PixelsPerRow();
   JXL_ASSIGN_OR_RETURN(
       Channel references,
       Channel::Create(memory_manager, properties.size() - kNumNonrefProperties,
@@ -369,7 +369,7 @@ Status EncodeModularChannelMAANS(const Image &image, pixel_type chan,
       FillImage(static_cast<float>(PredictorColor(Predictor::Weighted)[c]),
                 &predictor_img.Plane(c));
     }
-    const intptr_t onerow = channel.plane.PixelsPerRow();
+    const intptr_t onerow = channel.PixelsPerRow();
     weighted::State wp_state(wp_header, channel.w, channel.h);
     Properties properties(1);
     for (size_t y = 0; y < channel.h; y++) {
@@ -401,7 +401,7 @@ Status EncodeModularChannelMAANS(const Image &image, pixel_type chan,
       FillImage(static_cast<float>(PredictorColor(Predictor::Gradient)[c]),
                 &predictor_img.Plane(c));
     }
-    const intptr_t onerow = channel.plane.PixelsPerRow();
+    const intptr_t onerow = channel.PixelsPerRow();
     for (size_t y = 0; y < channel.h; y++) {
       const pixel_type *JXL_RESTRICT r = channel.Row(y);
       for (size_t x = 0; x < channel.w; x++) {
@@ -418,7 +418,7 @@ Status EncodeModularChannelMAANS(const Image &image, pixel_type chan,
       FillImage(static_cast<float>(PredictorColor(Predictor::Gradient)[c]),
                 &predictor_img.Plane(c));
     }
-    const intptr_t onerow = channel.plane.PixelsPerRow();
+    const intptr_t onerow = channel.PixelsPerRow();
     for (size_t y = 0; y < channel.h; y++) {
       const pixel_type *JXL_RESTRICT r = channel.Row(y);
       for (size_t x = 0; x < channel.w; x++) {
@@ -459,7 +459,7 @@ Status EncodeModularChannelMAANS(const Image &image, pixel_type chan,
     }
     uint32_t mul_shift =
         FloorLog2Nonzero(static_cast<uint32_t>(tree[0].multiplier));
-    const intptr_t onerow = channel.plane.PixelsPerRow();
+    const intptr_t onerow = channel.PixelsPerRow();
     for (size_t y = 0; y < channel.h; y++) {
       const pixel_type *JXL_RESTRICT r = channel.Row(y);
       for (size_t x = 0; x < channel.w; x++) {
@@ -472,7 +472,7 @@ Status EncodeModularChannelMAANS(const Image &image, pixel_type chan,
     }
 
   } else if (!use_wp && !skip_encoder_fast_path) {
-    const intptr_t onerow = channel.plane.PixelsPerRow();
+    const intptr_t onerow = channel.PixelsPerRow();
     JXL_ASSIGN_OR_RETURN(
         Channel references,
         Channel::Create(memory_manager,
@@ -502,7 +502,7 @@ Status EncodeModularChannelMAANS(const Image &image, pixel_type chan,
       }
     }
   } else {
-    const intptr_t onerow = channel.plane.PixelsPerRow();
+    const intptr_t onerow = channel.PixelsPerRow();
     JXL_ASSIGN_OR_RETURN(
         Channel references,
         Channel::Create(memory_manager,
